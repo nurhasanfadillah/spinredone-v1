@@ -3,15 +3,18 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { Card, Button, Input, ConfirmationModal, BottomSheet, SwipeableCard } from '../components/UI';
 import { formatCurrency, formatDate, generateId, TransactionSchema } from '../utils';
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Plus, X, Search, Settings, Check, Edit2, Lock, ListFilter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Plus, X, Search, Settings, Check, Edit2, Lock, ListFilter, ChevronLeft, ChevronRight, Calendar, Tag, FileText, ExternalLink } from 'lucide-react';
 import { Transaction, TransactionType } from '../types';
 
 export const FinanceManager: React.FC = () => {
   const { 
     transactions, addTransaction, updateTransaction, deleteTransaction, showNotification,
     financeCategories, addFinanceCategory, updateFinanceCategory, deleteFinanceCategory,
-    isAuthenticated
+    isAuthenticated, spks, navigate
   } = useAppStore();
+
+  // Transaction Detail State
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const [filterType, setFilterType] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -272,6 +275,7 @@ export const FinanceManager: React.FC = () => {
                     onDelete={isAuthenticated && !t.refId ? () => setDeleteConfirm({isOpen: true, id: t.id}) : undefined}
                     onEdit={isAuthenticated && !t.refId ? () => handleOpenSheet(t.type, t) : undefined}
                     isLocked={!isAuthenticated || !!t.refId}
+                    onClick={() => setSelectedTransaction(t)}
                 >
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-4">
@@ -408,6 +412,134 @@ export const FinanceManager: React.FC = () => {
                 })}
             </div>
          </div>
+      </BottomSheet>
+
+      {/* Transaction Detail Bottom Sheet */}
+      <BottomSheet
+        isOpen={selectedTransaction !== null}
+        onClose={() => setSelectedTransaction(null)}
+        title="Detail Transaksi"
+      >
+        {selectedTransaction && (() => {
+          // Dynamic production relation search
+          let linkedSPK: any = null;
+          let linkedMutation: any = null;
+          if (selectedTransaction.refId) {
+            for (const spk of spks) {
+              const mut = spk.mutations?.find(m => m.id === selectedTransaction.refId);
+              if (mut) {
+                linkedSPK = spk;
+                linkedMutation = mut;
+                break;
+              }
+            }
+          }
+
+          return (
+            <div className="space-y-6">
+              {/* Type Badge & Amount Centered */}
+              <div className="flex flex-col items-center justify-center p-6 bg-slate-800/40 rounded-3xl border border-white/5 shadow-inner">
+                <div className={`h-14 w-14 rounded-full flex items-center justify-center mb-3 ${
+                  selectedTransaction.type === 'IN' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                }`}>
+                  {selectedTransaction.type === 'IN' ? <ArrowUpCircle size={32} /> : <ArrowDownCircle size={32} />}
+                </div>
+                <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${
+                  selectedTransaction.type === 'IN' ? 'text-emerald-400' : 'text-red-400'
+                }`}>
+                  {selectedTransaction.type === 'IN' ? 'Pemasukan / Debet' : 'Pengeluaran / Kredit'}
+                </span>
+                <h3 className="text-3xl font-extrabold text-white">
+                  {formatCurrency(selectedTransaction.amount)}
+                </h3>
+              </div>
+
+              {/* Standard details */}
+              <div className="space-y-4">
+                <div className="flex gap-4 border-b border-white/5 pb-3">
+                  <Calendar size={18} className="text-slate-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Tanggal Transaksi</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">{formatDate(selectedTransaction.date)}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 border-b border-white/5 pb-3">
+                  <Tag size={18} className="text-slate-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Kategori</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">{selectedTransaction.category}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 border-b border-white/5 pb-3">
+                  <FileText size={18} className="text-slate-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Keterangan</p>
+                    <p className="text-sm font-medium text-slate-200 mt-0.5 leading-relaxed">{selectedTransaction.description}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pb-1">
+                  <div className="w-4 h-4 rounded-full border border-slate-600 flex items-center justify-center text-[8px] font-bold text-slate-500 shrink-0 mt-0.5">ID</div>
+                  <div className="w-full">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Reference ID / ID Transaksi</p>
+                    <p className="text-xs font-mono text-slate-400 mt-0.5 select-all break-all">{selectedTransaction.id}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Linked Production SPK Details */}
+              {linkedSPK && (
+                <div className="bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20 rounded-2xl p-5 space-y-4 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-2">
+                      <Settings size={14} className="animate-spin-slow" /> Transaksi Otomatis Produksi
+                    </h4>
+                    {selectedTransaction.refId && <Lock size={12} className="text-slate-400" />}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Nomor SPK</p>
+                      <p className="font-bold text-white mt-0.5">{linkedSPK.spkNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Produk</p>
+                      <p className="font-bold text-white mt-0.5">{linkedMutation.productName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Jumlah Produksi</p>
+                      <p className="font-bold text-white mt-0.5">{linkedMutation.qty} Pcs</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Catatan Produksi</p>
+                      <p className="font-medium text-slate-300 mt-0.5">{linkedMutation.notes || '-'}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedTransaction(null);
+                      navigate('SPK_DETAIL', { id: linkedSPK.id });
+                    }}
+                    className="w-full flex items-center justify-center gap-2 bg-primary text-dark-bg py-2.5 rounded-xl font-bold text-sm transform active:scale-[0.98] transition-all shadow-md mt-2"
+                  >
+                    <span>Lihat Log Produksi SPK</span>
+                    <ExternalLink size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Close Button */}
+              <div className="pt-2">
+                <Button fullWidth onClick={() => setSelectedTransaction(null)} size="md" variant="secondary">
+                  Tutup
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
       </BottomSheet>
 
       <ConfirmationModal 
