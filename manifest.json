@@ -1,0 +1,22 @@
+{
+  "short_name": "SPINER",
+  "name": "SPINER Production Manager",
+  "icons": [
+    {
+      "src": "https://lh3.googleusercontent.com/d/1UM8L5GkEV9UxGHUAroJ9uAiTqipLPOQc",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://lh3.googleusercontent.com/d/1UM8L5GkEV9UxGHUAroJ9uAiTqipLPOQc",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "orientation": "portrait",
+  "scope": "/"
+}
