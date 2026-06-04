@@ -1,5 +1,6 @@
 {
   "name": "SPINER",
   "description": "SPK INtegration Engine Redone - Aplikasi manajemen produksi mobile-first untuk pengelolaan SPK dan Master Data.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": []
 }

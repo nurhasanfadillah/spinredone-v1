@@ -101,84 +101,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data: finCatData } = await supabase.from('finance_categories').select('name');
       if (finCatData) setFinanceCategories(finCatData.map(c => c.name));
 
-      // 3. Products
-      const { data: prodData } = await supabase.from('products').select('*');
-      if (prodData) {
-         setProducts(prodData.map(p => ({
-             id: p.id,
-             name: p.name,
-             category: p.category,
-             cmtPrice: p.cmt_price
-         })));
+      // 3. Products (Unlimited pagination to bypass 1000 limit)
+      let allProdData: any[] = [];
+      let prodFrom = 0;
+      const prodBatchSize = 1000;
+      let prodHasMore = true;
+
+      while (prodHasMore) {
+        const { data: chunk, error: prodError } = await supabase
+          .from('products')
+          .select('*')
+          .range(prodFrom, prodFrom + prodBatchSize - 1);
+
+        if (prodError) throw prodError;
+        if (chunk && chunk.length > 0) {
+          allProdData = [...allProdData, ...chunk];
+          if (chunk.length < prodBatchSize) {
+            prodHasMore = false;
+          } else {
+            prodFrom += prodBatchSize;
+          }
+        } else {
+          prodHasMore = false;
+        }
       }
 
-      // 4. Transactions
-      const { data: txData } = await supabase.from('transactions').select('*');
-      if (txData) {
-          setTransactions(txData.map(t => ({
-              id: t.id,
-              date: t.date,
-              type: t.type,
-              category: t.category,
-              amount: t.amount,
-              description: t.description,
-              refId: t.ref_id
-          })));
+      setProducts(allProdData.map(p => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          cmtPrice: p.cmt_price
+      })));
+
+      // 4. Transactions (Unlimited pagination to bypass 1000 limit)
+      let allTxData: any[] = [];
+      let txFrom = 0;
+      const txBatchSize = 1000;
+      let txHasMore = true;
+
+      while (txHasMore) {
+        const { data: chunk, error: txError } = await supabase
+          .from('transactions')
+          .select('*')
+          .order('date', { ascending: false })
+          .range(txFrom, txFrom + txBatchSize - 1);
+
+        if (txError) throw txError;
+        if (chunk && chunk.length > 0) {
+          allTxData = [...allTxData, ...chunk];
+          if (chunk.length < txBatchSize) {
+            txHasMore = false;
+          } else {
+            txFrom += txBatchSize;
+          }
+        } else {
+          txHasMore = false;
+        }
       }
 
-      // 5. SPKs (Complex Join)
-      const { data: spkData, error } = await supabase
-        .from('spks')
-        .select(`
-            *,
-            items:spk_items(*),
-            mutations:spk_mutations(*)
-        `)
-        .order('date', { ascending: false });
+      setTransactions(allTxData.map(t => ({
+          id: t.id,
+          date: t.date,
+          type: t.type,
+          category: t.category,
+          amount: t.amount,
+          description: t.description,
+          refId: t.ref_id
+      })));
 
-      if (error) throw error;
+      // 5. SPKs (Complex Join with Unlimited pagination to bypass 1000 limit)
+      let allSpkData: any[] = [];
+      let spkFrom = 0;
+      const spkBatchSize = 1000;
+      let spkHasMore = true;
 
-      if (spkData) {
-        const formattedSPKs: SPK[] = spkData.map((s: any) => {
-            const spkMutations = s.mutations || [];
-            
-            return {
-                id: s.id,
-                spkNumber: s.spk_number,
-                date: s.date,
-                notes: s.notes,
-                totalQty: s.total_qty,
-                totalAmount: s.total_amount,
-                items: s.items.map((i: any) => {
-                    const realCompletedQty = spkMutations
-                        .filter((m: any) => m.item_id === i.id)
-                        .reduce((sum: number, m: any) => sum + m.qty, 0);
+      while (spkHasMore) {
+        const { data: chunk, error: spkError } = await supabase
+          .from('spks')
+          .select(`
+              *,
+              items:spk_items(*),
+              mutations:spk_mutations(*)
+          `)
+          .order('date', { ascending: false })
+          .range(spkFrom, spkFrom + spkBatchSize - 1);
 
-                    return {
-                        id: i.id,
-                        spkId: i.spk_id,
-                        productId: i.product_id,
-                        productName: i.product_name,
-                        cmtPrice: i.cmt_price,
-                        qty: i.qty,
-                        completedQty: realCompletedQty, 
-                        total: i.qty * i.cmt_price, 
-                        status: i.status as ItemStatus
-                    };
-                }),
-                mutations: spkMutations.map((m: any) => ({
-                    id: m.id,
-                    spkId: m.spk_id,
-                    itemId: m.item_id,
-                    productName: m.product_name,
-                    date: m.date,
-                    qty: m.qty,
-                    notes: m.notes
-                }))
-            };
-        });
-        setSpks(formattedSPKs);
+        if (spkError) throw spkError;
+        if (chunk && chunk.length > 0) {
+          allSpkData = [...allSpkData, ...chunk];
+          if (chunk.length < spkBatchSize) {
+            spkHasMore = false;
+          } else {
+            spkFrom += spkBatchSize;
+          }
+        } else {
+          spkHasMore = false;
+        }
       }
+
+      const formattedSPKs: SPK[] = allSpkData.map((s: any) => {
+          const spkMutations = s.mutations || [];
+          
+          return {
+              id: s.id,
+              spkNumber: s.spk_number,
+              date: s.date,
+              notes: s.notes,
+              totalQty: s.total_qty,
+              totalAmount: s.total_amount,
+              items: s.items.map((i: any) => {
+                  const realCompletedQty = spkMutations
+                      .filter((m: any) => m.item_id === i.id)
+                      .reduce((sum: number, m: any) => sum + m.qty, 0);
+
+                  return {
+                      id: i.id,
+                      spkId: i.spk_id,
+                      productId: i.product_id,
+                      productName: i.product_name,
+                      cmtPrice: i.cmt_price,
+                      qty: i.qty,
+                      completedQty: realCompletedQty, 
+                      total: i.qty * i.cmt_price, 
+                      status: i.status as ItemStatus
+                  };
+              }),
+              mutations: spkMutations.map((m: any) => ({
+                  id: m.id,
+                  spkId: m.spk_id,
+                  itemId: m.item_id,
+                  productName: m.product_name,
+                  date: m.date,
+                  qty: m.qty,
+                  notes: m.notes
+              }))
+          };
+      });
+      setSpks(formattedSPKs);
 
     } catch (error: any) {
       console.error('Error fetching data:', error);
