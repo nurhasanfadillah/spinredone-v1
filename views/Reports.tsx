@@ -62,48 +62,53 @@ export const Reports: React.FC = () => {
   // --- REPORT GENERATION LOGIC ---
 
   const handleExportProduction = () => {
-    // String comparison for filtering
-    const filteredSPKs = spks.filter(s => {
-      const d = getDateString(s.date);
-      return d >= startDate && d <= endDate;
+    // Filter by mutation date, same logic as chart/summary on the page
+    const csvData: object[] = [];
+    spks.forEach(spk => {
+      spk.mutations?.forEach(mut => {
+        const d = getDateString(mut.date);
+        if (d >= startDate && d <= endDate) {
+          const item = spk.items.find(i => i.id === mut.itemId);
+          csvData.push({
+            'Tanggal Produksi': formatDate(mut.date),
+            'No SPK': spk.spkNumber,
+            'Produk': mut.productName,
+            'Harga CMT': item?.cmtPrice ?? 0,
+            'Qty Produksi': mut.qty,
+            'Nilai (Rp)': (item?.cmtPrice ?? 0) * mut.qty,
+            'Catatan': mut.notes || '-',
+          });
+        }
+      });
     });
 
-    if (filteredSPKs.length === 0) {
+    if (csvData.length === 0) {
       showNotification('Tidak ada data produksi pada periode ini', 'warning');
       return;
     }
-
-    const csvData = filteredSPKs.flatMap(spk => 
-      spk.items.map(item => ({
-        'No SPK': spk.spkNumber,
-        'Tanggal': formatDate(spk.date),
-        'Produk': item.productName,
-        'Harga CMT': item.cmtPrice,
-        'Qty Target': item.qty,
-        'Qty Selesai': item.completedQty || 0,
-        'Status': item.status,
-        'Total Nilai': item.total,
-        'Catatan': spk.notes || '-'
-      }))
-    );
 
     exportToCSV(csvData, `Laporan_Produksi_${startDate}_${endDate}`);
     showNotification('Laporan Produksi berhasil diunduh', 'success');
   };
 
   const handleExportProductionPDF = () => {
-    const filteredSPKs = spks.filter(s => {
-      const d = getDateString(s.date);
-      return d >= startDate && d <= endDate;
-    });
+    // Check using mutation date (same logic as chart/summary on the page)
+    const hasMutations = spks.some(s =>
+      s.mutations?.some(m => {
+        const d = getDateString(m.date);
+        return d >= startDate && d <= endDate;
+      })
+    );
 
-    if (filteredSPKs.length === 0) {
+    if (!hasMutations) {
       showNotification('Tidak ada data produksi pada periode ini', 'warning');
       return;
     }
 
-    exportProductionToPDF(filteredSPKs, startDate, endDate);
-    showNotification('Laporan Produksi (PDF) berhasil diunduh', 'success');
+    // Pass all spks; the PDF function filters by mutation date internally
+    const ok = exportProductionToPDF(spks, startDate, endDate);
+    if (ok) showNotification('Laporan Produksi (PDF) berhasil diunduh', 'success');
+    else showNotification('Tidak ada data produksi dalam periode ini', 'warning');
   };
 
   const handleExportFinanceCSV = () => {
@@ -136,18 +141,12 @@ export const Reports: React.FC = () => {
       return txDate >= startDate && txDate <= endDate;
     });
 
-    // Sort by date ascending
-    filteredTx.sort((a,b) => {
-        // Safe sort
-        const dateA = a.date || '';
-        const dateB = b.date || '';
-        return dateA.localeCompare(dateB);
-    });
-
     if (filteredTx.length === 0) {
       showNotification('Tidak ada data keuangan pada periode ini', 'warning');
       return;
     }
+
+    filteredTx.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
     exportFinanceToPDF(filteredTx, startDate, endDate);
     showNotification('Laporan Keuangan (PDF) berhasil diunduh', 'success');

@@ -428,8 +428,8 @@ export const exportSPKToPDF = (spk: SPK) => {
   doc.save(`SPK_${spk.spkNumber}.pdf`);
 };
 
-export const exportProductionToPDF = (spks: SPK[], startDate: string, endDate: string) => {
-  if (!spks || spks.length === 0) return;
+export const exportProductionToPDF = (spks: SPK[], startDate: string, endDate: string): boolean => {
+  if (!spks || spks.length === 0) return false;
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
@@ -448,7 +448,7 @@ export const exportProductionToPDF = (spks: SPK[], startDate: string, endDate: s
   doc.setTextColor(71, 85, 105); // Slate 600
   doc.text("Jl. Raya Cileungsi-Jonggol Km. 10, Cipeucang, Cileungsi, Bogor, Jawa Barat 16820", 14, 26);
   doc.text("Email: redoneberkahmandiri@gmail.com | Phone: +62 812-3456-7890", 14, 31);
-  
+
   doc.setDrawColor(203, 213, 225); // Slate 300
   doc.line(14, 36, pageWidth - 14, 36);
 
@@ -466,27 +466,30 @@ export const exportProductionToPDF = (spks: SPK[], startDate: string, endDate: s
   const printDate = `Dicetak: ${new Date().toLocaleDateString('id-ID')} ${new Date().toLocaleTimeString('id-ID')}`;
   doc.text(printDate, pageWidth - 14, 52, { align: 'right' });
 
-  // --- FILTER & SUMMARY ---
-  const filteredSPKs = spks.filter(s => {
-    const d = new Date(s.date);
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23,59,59);
-    return d >= start && d <= end;
-  }).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Sort by date ascending (data already pre-filtered by caller)
+  const sortedSPKs = [...spks].sort((a, b) => {
+    const dateA = a.date.substring(0, 10);
+    const dateB = b.date.substring(0, 10);
+    return dateA.localeCompare(dateB);
+  });
 
-  if (filteredSPKs.length === 0) return;
-
-  // Calculate Totals based on COMPLETED Items (Realized)
+  // Calculate totals using mutations filtered by date range for accurate period reporting
   let totalProducedQty = 0;
   let totalRealizedValue = 0;
 
-  filteredSPKs.forEach(spk => {
-      spk.items.forEach(item => {
-          const produced = item.completedQty || 0;
-          totalProducedQty += produced;
-          totalRealizedValue += (produced * item.cmtPrice);
-      });
+  sortedSPKs.forEach(spk => {
+      if (spk.mutations) {
+          spk.mutations.forEach(mut => {
+              const mutDate = mut.date.substring(0, 10);
+              if (mutDate >= startDate && mutDate <= endDate) {
+                  const item = spk.items.find(i => i.id === mut.itemId);
+                  if (item) {
+                      totalProducedQty += mut.qty;
+                      totalRealizedValue += (mut.qty * item.cmtPrice);
+                  }
+              }
+          });
+      }
   });
 
   const summaryY = 60;
@@ -515,27 +518,34 @@ export const exportProductionToPDF = (spks: SPK[], startDate: string, endDate: s
   doc.setFont("helvetica", "bold");
   doc.text(formatCurrency(totalRealizedValue), 18 + boxWidth + 5, summaryY + 14);
 
-  // --- TABLE ---
+  // --- TABLE --- (per mutation entry, filtered to date range)
   const tableRows: any[] = [];
-  filteredSPKs.forEach(spk => {
-      spk.items.forEach(item => {
-          // Calculate Realized Value per Item
-          const realizedValue = (item.completedQty || 0) * item.cmtPrice;
-          
-          tableRows.push([
-              formatDate(spk.date),
-              spk.spkNumber,
-              item.productName,
-              item.qty,
-              item.completedQty || 0,
-              formatCurrency(realizedValue) // Show Realized Value in Table
-          ]);
-      });
+  sortedSPKs.forEach(spk => {
+      if (spk.mutations) {
+          spk.mutations.forEach(mut => {
+              const mutDate = mut.date.substring(0, 10);
+              if (mutDate >= startDate && mutDate <= endDate) {
+                  const item = spk.items.find(i => i.id === mut.itemId);
+                  const cmtPrice = item ? item.cmtPrice : 0;
+                  const realizedValue = mut.qty * cmtPrice;
+                  tableRows.push([
+                      formatDate(mut.date),
+                      spk.spkNumber,
+                      mut.productName,
+                      '-',
+                      mut.qty,
+                      formatCurrency(realizedValue)
+                  ]);
+              }
+          });
+      }
   });
+
+  if (tableRows.length === 0) return false;
 
   autoTable(doc, {
       startY: summaryY + 28,
-      head: [['Tanggal', 'No SPK', 'Produk', 'Target', 'Selesai', 'Nilai (Rp)']],
+      head: [['Tanggal', 'No SPK', 'Produk', 'SPK Target', 'Qty Produksi', 'Nilai (Rp)']],
       body: tableRows,
       theme: 'grid',
       headStyles: { 
@@ -568,4 +578,5 @@ export const exportProductionToPDF = (spks: SPK[], startDate: string, endDate: s
   }
 
   doc.save(`Laporan_Produksi_${startDate}_${endDate}.pdf`);
+  return true;
 };
